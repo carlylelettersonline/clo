@@ -49,6 +49,7 @@ def ingest_data(job_id):
 
     volume_files = [f for f in os.listdir(tei_path) if f.lower().startswith('volume') and f.lower().endswith('xml') and 'index' not in f]
     volume_id_map = {}
+    interlocutor_id_map = {}
     volumes_needing_id_fix = []
     front_matter_errors = []
     letter_errors = []
@@ -115,10 +116,22 @@ def ingest_data(job_id):
                 except:
                     letter.date = None
                     job.report(f'''Letter "{letter_info.get('doi')}" from volume {vol_no} has invalid date: {letter_info.get('date')}''')
-    
+
+                # handle sender/recipient
+                sender = None
+                recipient = None
+                if 'sender' in letter_info:
+                    sender = get_interlocutor_id(corpus, letter_info['sender'], interlocutor_id_map)
+
+                if 'addressee' in letter_info:
+                    recipient = get_interlocutor_id(corpus, letter_info['addressee'], interlocutor_id_map)
+
                 letter.date_label = letter_info.get('date_label')
                 letter.description = letter_info.get('description')
                 letter.doi = letter_info.get('doi')
+                letter.vol_no = vol_no
+                letter.sender = sender
+                letter.recipient = recipient
                 letter.sourcenote = letter_info.get('sourcenote')
                 letter.footnotes = letter_info.get('footnotes')
                 letter.save()
@@ -162,7 +175,8 @@ def delete_clo_data(corpus):
         'SpecialCollection',
         'LetterVolume',
         'FrontMatter',
-        'Letter'
+        'Letter',
+        'Interlocutor'
     ]
 
     for clo_ct in clo_cts:
@@ -206,11 +220,17 @@ def parse_letter(tag, info={}, parser=None):
 
         elif tag.name == 'bibl' and 'xml:id' in tag.attrs:
             info['doi'] = tag['xml:id']
+
             docDate = tag.find('docDate')
             info['date'] = docDate['value']
             if info['date'].endswith('00'):
                 info['date'] = info['date'].replace('-00', '-01')
             info['date_label'] = docDate.text
+
+            persons = tag.find_all('person')
+            for person in persons:
+                if 'type' in person.attrs and person['type'] in ['sender', 'addressee']:
+                    info[person['type']] = person.text.strip()
 
         elif tag.name == 'head':
             info['description'] = tag.text.strip()
@@ -367,6 +387,16 @@ def tei_to_html(tag, info, parser):
         html += tag.get_text()
 
     return html
+
+
+def get_interlocutor_id(corpus, name, interlocutor_id_map):
+    if name not in interlocutor_id_map:
+        interlocutor = corpus.get_content('Interlocutor')
+        interlocutor.name = name
+        interlocutor.save()
+        interlocutor_id_map[name] = interlocutor.id
+
+    return interlocutor_id_map[name]
 
 
 def log_tag(tag):

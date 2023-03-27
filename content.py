@@ -1,16 +1,66 @@
 REGISTRY = [
     {
+        "name": "Interlocutor",
+        "plural_name": "Interlocutors",
+        "fields": [
+            {
+                "name": "name",
+                "label": "Name",
+                "indexed": False,
+                "unique": True,
+                "multiple": False,
+                "in_lists": True,
+                "type": "keyword",
+                "choices": [],
+                "cross_reference_type": "",
+                "has_intensity": False,
+                "language": None,
+                "autocomplete": False,
+                "synonym_file": None,
+                "indexed_with": [],
+                "unique_with": [],
+                "stats": {},
+                "inherited": False
+            }
+        ],
+        "show_in_nav": True,
+        "autocomplete_labels": False,
+        "proxy_field": "",
+        "templates": {
+            "Label": {
+                "template": "{{ Interlocutor.name }}",
+                "mime_type": "text/html"
+            }
+        },
+        "view_widget_url": None,
+        "edit_widget_url": None,
+        "inherited_from_module": None,
+        "inherited_from_class": None,
+        "base_mongo_indexes": None,
+        "has_file_field": False,
+        "invalid_field_names": [
+            "corpus_id",
+            "content_type",
+            "last_updated",
+            "provenance",
+            "field_intensities",
+            "path",
+            "label",
+            "uri"
+        ]
+    },
+    {
         "name": "Letter",
         "plural_name": "Letters",
         "fields": [
             {
-                "name": "date",
-                "label": "Date",
+                "name": "doi",
+                "label": "DOI",
                 "indexed": False,
                 "unique": False,
                 "multiple": False,
                 "in_lists": True,
-                "type": "date",
+                "type": "keyword",
                 "choices": [],
                 "cross_reference_type": "",
                 "has_intensity": False,
@@ -23,13 +73,13 @@ REGISTRY = [
                 "inherited": False
             },
             {
-                "name": "date_label",
-                "label": "Date Label",
+                "name": "vol_no",
+                "label": "Volume Number",
                 "indexed": False,
                 "unique": False,
                 "multiple": False,
                 "in_lists": True,
-                "type": "keyword",
+                "type": "number",
                 "choices": [],
                 "cross_reference_type": "",
                 "has_intensity": False,
@@ -61,8 +111,65 @@ REGISTRY = [
                 "inherited": False
             },
             {
-                "name": "doi",
-                "label": "DOI",
+                "name": "sender",
+                "label": "Sender",
+                "indexed": False,
+                "unique": False,
+                "multiple": False,
+                "in_lists": True,
+                "type": "cross_reference",
+                "choices": [],
+                "cross_reference_type": "Interlocutor",
+                "has_intensity": False,
+                "language": None,
+                "autocomplete": False,
+                "synonym_file": None,
+                "indexed_with": [],
+                "unique_with": [],
+                "stats": {},
+                "inherited": False
+            },
+            {
+                "name": "recipient",
+                "label": "Recipient",
+                "indexed": False,
+                "unique": False,
+                "multiple": False,
+                "in_lists": True,
+                "type": "cross_reference",
+                "choices": [],
+                "cross_reference_type": "Interlocutor",
+                "has_intensity": False,
+                "language": None,
+                "autocomplete": False,
+                "synonym_file": None,
+                "indexed_with": [],
+                "unique_with": [],
+                "stats": {},
+                "inherited": False
+            },
+            {
+                "name": "date",
+                "label": "Date",
+                "indexed": False,
+                "unique": False,
+                "multiple": False,
+                "in_lists": True,
+                "type": "date",
+                "choices": [],
+                "cross_reference_type": "",
+                "has_intensity": False,
+                "language": None,
+                "autocomplete": False,
+                "synonym_file": None,
+                "indexed_with": [],
+                "unique_with": [],
+                "stats": {},
+                "inherited": False
+            },
+            {
+                "name": "date_label",
+                "label": "Date Label",
                 "indexed": False,
                 "unique": False,
                 "multiple": False,
@@ -191,14 +298,14 @@ REGISTRY = [
         "base_mongo_indexes": None,
         "has_file_field": False,
         "invalid_field_names": [
-            "corpus_id",
             "content_type",
-            "last_updated",
             "provenance",
+            "label",
+            "last_updated",
+            "uri",
             "field_intensities",
             "path",
-            "label",
-            "uri"
+            "corpus_id"
         ]
     },
     {
