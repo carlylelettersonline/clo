@@ -230,7 +230,8 @@ def parse_letter(tag, info={}, parser=None):
             persons = tag.find_all('person')
             for person in persons:
                 if 'type' in person.attrs and person['type'] in ['sender', 'addressee']:
-                    info[person['type']] = person.text.strip()
+                    if person['type'] not in info:
+                        info[person['type']] = person.text.strip()
 
         elif tag.name == 'head':
             info['description'] = tag.text.strip()
@@ -574,7 +575,7 @@ def front_matter_slug(xml_id):
 def create_album_tei(corpus):
     album_meta = [
         {
-            'title': "Frontispieces of the Duke-Edinburgh Edition",
+            'title': "Frontispieces of the <i>Duke-Edinburgh Edition</i>",
             'desc': "This is a special album collecting all of the images from the entire run to date of the Duke-Edinburgh Edition of the Carlyle Letters, including all frontispieces and all internal images."
         },
         {
