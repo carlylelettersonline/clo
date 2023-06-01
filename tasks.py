@@ -211,7 +211,7 @@ def parse_letter(tag, info={}, parser=None):
         info['errors'] = []
 
     ignore_tags = [
-
+        'sic'
     ]
 
     if tag.name:
@@ -273,7 +273,6 @@ def tei_to_html(tag, info, parser):
         'roleName': 'span:role',
         'abbr': 'span:abbreviation',
         'cell': 'td:m-2',
-        'sic': 's',
         'corr': 'span:correction',
         'lg': 'div:lg',
         'listBibl': 'p',
@@ -285,6 +284,10 @@ def tei_to_html(tag, info, parser):
 
     silent = [
         'body', 'div', 'orig', 'reg', 'title', 'name', 'forename', 'surname', 'pb', 'div1', 'foreign'
+    ]
+
+    discard = [
+        'sic'
     ]
 
     if tag.name:
@@ -379,6 +382,10 @@ def tei_to_html(tag, info, parser):
             # tags to ignore (but keep content inside)
             elif tag.name in silent:
                 html += "".join([parser(child, info, parser) for child in tag])
+
+            # tags where we want to discard both tag and content
+            elif tag.name in discard:
+                pass
 
             else:
                 info['errors'].append("Unhandled tag: {0}".format(log_tag(tag)))
