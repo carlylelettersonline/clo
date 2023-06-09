@@ -193,8 +193,18 @@ def parse_front_matter(tag, info={}, parser=None):
     if 'errors' not in info:
         info['errors'] = []
 
+    ignore_tags = [
+        'sourceNote'
+    ]
+
     if tag.name:
-        if tag.name == 'title' and not info['title']:
+        if tag.name in ignore_tags:
+            pass
+
+        elif tag.name == 'idno' and 'type' in tag.attrs and tag.attrs['type'] in ['firstpage', 'lastpage']:
+            pass
+
+        elif tag.name == 'title' and not info['title']:
             info['title'] = "".join([tei_to_html(child, info, parse_front_matter) for child in tag])
         else:
             html += tei_to_html(tag, info, parse_front_matter)
@@ -425,21 +435,21 @@ def create_volume_batches(corpus, volume_id_map):
             'title': "The Carlyles in Scotland and in London",
             'date_range': "1812 to 1840",
             'volumes': [1, 12],
-            'selected_contents': '''Ecclefechan / School Days / Edward Irving / Teacher and Tutor / Edinburgh / Courtship and Marriage / Craigenputtoch / Ralph Waldo Emerson / London / Leigh Hunt / John Stuart Mill / John Sterling / Robert Browning / Alfred Tennyson / Erasmus Darwin / Harriet Martineau / John Forster / Lectures on Literature, Revolution, and Heroes / Publication of Elements of Geometry (1822), Wilhelm Meister (1824), Life of Schiller (1825), German Romance (1827), “Burns” (1828), “Signs of the Times” (1829), “On History” (1830), “Characteristics” (1831), Sartor Resartus (1833–34), French Revolution (1837), Essays (1838), and Chartism (1839)''',
+            'selected_contents': '''Ecclefechan / School Days / Edward Irving / Teacher and Tutor / Edinburgh / Courtship and Marriage / Craigenputtoch / Ralph Waldo Emerson / London / Leigh Hunt / John Stuart Mill / John Sterling / Robert Browning / Alfred Tennyson / Erasmus Darwin / Harriet Martineau / John Forster / Lectures on Literature, Revolution, and Heroes / Publication of Elements of Geometry (1822), <i>Wilhelm Meister</i> (1824), <i>Life of Schiller</i> (1825), <i>German Romance</i> (1827), “Burns” (1828), “Signs of the Times” (1829), “On History” (1830), “Characteristics” (1831), <i>Sartor Resartus</i> (1833–34), <i>French Revolution</i> (1837), <i>Essays</i> (1838), and <i>Chartism</i> (1839)''',
             'order': 1
         },
         {
             'title': "Success and Security",
             'date_range': "1841 to 1850",
             'volumes': [13, 25],
-            'selected_contents': '''Samuel Laurence’s Portraits / Geraldine Jewsbury / Death of JWC’s Mother / Death of Sterling / William Makepeace Thackeray / Corn Laws / Charles Gavan Duffy / Journeys to Ireland and to Germany / International Copyright Law / John Ruskin / Lord and Lady Ashburton / Edward FitzGerald / Squire forgeries / R. M. Milnes / Giuseppe Mazzini / Emerson’s second visit / Joseph Neuberg / Louis Blanc / JWC’s screen / Margaret Fuller / John Tyndall / Publication of Heroes and Hero-Worship (1841), Past and Present (1843), Oliver Cromwell’s Letters and Speeches (1845), “The Negro Question” (1849), and Latter-Day Pamphlets (1850)''',
+            'selected_contents': '''Samuel Laurence’s Portraits / Geraldine Jewsbury / Death of JWC’s Mother / Death of Sterling / William Makepeace Thackeray / Corn Laws / Charles Gavan Duffy / Journeys to Ireland and to Germany / International Copyright Law / John Ruskin / Lord and Lady Ashburton / Edward FitzGerald / Squire forgeries / R. M. Milnes / Giuseppe Mazzini / Emerson’s second visit / Joseph Neuberg / Louis Blanc / JWC’s screen / Margaret Fuller / John Tyndall / Publication of <i>Heroes and Hero-Worship</i> (1841), <i>Past and Present</i> (1843), <i>Oliver Cromwell’s Letters and Speeches</i> (1845), “The Negro Question” (1849), and <i>Latter-Day Pamphlets</i> (1850)''',
             'order': 2
         },
         {
             'title': "The “Valley of the Shadow of Frederick”",
             'date_range': "1851 to November 1862",
             'volumes': [26, 38],
-            'selected_contents': '''Woolner’s Medallion / Crystal Palace / The Grange / Death of Wellington / Journeys to Paris and Germany / Sickness and Health / Garrett Study / John Ricardo / Holidays in Scotland / Death of TC’s Mother / American Investments / Crimean War / JWC’s “BUDGET of a Femme Incomprise” / “The Guises” / Alexander and Anne Gilchrist / Death of Lady Ashburton / Indian Mutiny / Tait’s A Chelsea Interior / Louisa Lady Ashburton / George Eliot / Ford Madox Ford’s Work / Death of Nero / Charlotte Cushman / American Civil War / Publication of Life of Sterling (1851), Collected Works (1857–58), and Frederick, Volumes 1–3 (1858, 1862)''',
+            'selected_contents': '''Woolner’s Medallion / Crystal Palace / The Grange / Death of Wellington / Journeys to Paris and Germany / Sickness and Health / Garrett Study / John Ricardo / Holidays in Scotland / Death of TC’s Mother / American Investments / Crimean War / JWC’s “BUDGET of a Femme Incomprise” / “The Guises” / Alexander and Anne Gilchrist / Death of Lady Ashburton / Indian Mutiny / Tait’s A Chelsea Interior / Louisa Lady Ashburton / George Eliot / Ford Madox Ford’s <i>Work</i> / Death of Nero / Charlotte Cushman / American Civil War / Publication of <i>Life of Sterling</i> (1851), <i>Collected Works</i> (1857–58), and <i>Frederick</i>, Volumes 1–3 (1858, 1862)''',
             'order': 3
         },
         {

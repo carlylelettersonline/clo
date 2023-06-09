@@ -590,7 +590,7 @@ REGISTRY = [
                 "unique": False,
                 "multiple": False,
                 "in_lists": True,
-                "type": "text",
+                "type": "html",
                 "choices": [],
                 "cross_reference_type": "",
                 "has_intensity": False,
