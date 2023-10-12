@@ -137,7 +137,7 @@ def ingest_data(job_id):
                 letter.save()
 
                 if letter.date:
-                    letter_key = f'{letter.date.year}-{letter.date.month}-{letter.date.day}-{letter.doi}'
+                    letter_key = f'{letter.date.year}-{letter.date.month}-{letter.date.day}-{letter.id}'
                     volume_letters[letter_key] = letter.id
     
             sorted_letter_keys = natsorted(list(volume_letters.keys()))
