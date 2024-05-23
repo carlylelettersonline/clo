@@ -48,6 +48,7 @@ def ingest_data(job_id):
     tei_path = tei_repo.path
 
     volume_files = [f for f in os.listdir(tei_path) if f.lower().startswith('volume') and f.lower().endswith('xml') and 'index' not in f]
+    volume_files.sort()
     volume_id_map = {}
     interlocutor_id_map = {}
     volumes_needing_id_fix = []
@@ -455,7 +456,7 @@ def create_volume_batches(corpus, volume_id_map):
         {
             'title': "“We shall go to them”",
             'date_range': "December 1862 to February 1881",
-            'volumes': [39, 49],
+            'volumes': [39, 50],
             'selected_contents': '''Readings by Dickens / Moncure Conway / JWC’s Failing Health / Death of Thackeray / “Valley of the shadow of blue pill” / Lord Houghton / Margaret Oliphant / Death of Lord Ashburton / “Ilias (Americana) in Nuce” (1863) and Frederick, Volumes 4–6 (1864, 1865) / Death of JWC, 1866 / Eyre Defence Committee / Visit to Menton / Quarrels with Ruskin / Photos by Cameron / Shooting Niagara (1867) / the Watts portrait / the Library Edition / Mary Carlyle Aitken / Holidays with Lady Ashburton / Woolner’s plaster of TC’s hands / Cromwell’s death mask / Death of Dickens / the Franco-Prussian War / Farewell to Mazzini / John Ruskin / Emerson’s Last Visit''',
             'order': 4
         },
