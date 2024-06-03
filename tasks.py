@@ -140,6 +140,9 @@ def ingest_data(job_id):
                 if letter.date:
                     letter_key = f'{letter.date.year}-{letter.date.month}-{letter.date.day}-{letter.id}'
                     volume_letters[letter_key] = letter.id
+                elif vol_no == 0:
+                    letter_key = letter.doi
+                    volume_letters[letter_key] = letter.id
     
             sorted_letter_keys = natsorted(list(volume_letters.keys()))
             for sorted_letter_key in sorted_letter_keys:
@@ -233,9 +236,11 @@ def parse_letter(tag, info={}, parser=None):
             info['doi'] = tag['xml:id']
 
             docDate = tag.find('docDate')
-            info['date'] = docDate['value']
-            if info['date'].endswith('00'):
-                info['date'] = info['date'].replace('-00', '-01')
+            if 'value' in docDate.attrs:
+                info['date'] = docDate['value']
+                if info['date'].endswith('00'):
+                    info['date'] = info['date'].replace('-00', '-01')
+
             info['date_label'] = docDate.text
 
             persons = tag.find_all('person')
@@ -524,7 +529,7 @@ def import_photos(corpus, tei_path, volume_id_map):
             photo.publisher = photo_tag.find('div', attrs={'type': 'publisher'}).p.text.strip()
 
             if album_file.endswith('_0.xml'):
-                relevant_volume_id = volume_id_map[current_photo + 1]
+                relevant_volume_id = volume_id_map[current_photo]
                 photo.frontispiece_volume = relevant_volume_id
 
             photo.save()
