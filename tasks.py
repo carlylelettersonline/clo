@@ -155,7 +155,7 @@ def ingest_data(job_id):
     create_volume_batches(corpus, volume_id_map)
 
     job.report("Importing photos...")
-    import_photos(corpus, tei_path, volume_id_map)
+    import_photos(job, corpus, tei_path, volume_id_map)
 
     job.report("Importing manuscript images...")
     import_manuscripts(corpus, tei_path)
@@ -481,7 +481,7 @@ def create_volume_batches(corpus, volume_id_map):
         vb.save()
 
 
-def import_photos(corpus, tei_path, volume_id_map):
+def import_photos(job, corpus, tei_path, volume_id_map):
     album_files = [f for f in os.listdir(tei_path) if f.lower().startswith('album') and f.lower().endswith('xml')]
 
     for album_file in album_files:
@@ -489,6 +489,7 @@ def import_photos(corpus, tei_path, volume_id_map):
         if album_no.isdigit():
             album_no = int(album_no)
         else:
+            job.report(f"{album_file} is not named according to photo album TEI file naming convention. Skipping...")
             continue
 
         album_file = f'{tei_path}/{album_file}'
@@ -498,7 +499,12 @@ def import_photos(corpus, tei_path, volume_id_map):
         tei = BeautifulSoup(tei_text, 'xml')
 
         album = corpus.get_content('PhotoAlbum')
-        album.title = tei.find('titlePart', attrs={'type': 'main'}).text.strip()
+        title_tag = tei.find('titlePart', attrs={'type': 'main'})
+        if title_tag:
+            album.title = title_tag.text.strip()
+        else:
+            job.report(f"Unable to determine title for album {album_file.replace(tei_path, '')}!")
+
         album.album_no = album_no
         album.description = tei.find('div', attrs={'type': 'description'}).p.text.strip()
 
