@@ -499,15 +499,23 @@ def import_photos(job, corpus, tei_path, volume_id_map):
         tei = BeautifulSoup(tei_text, 'xml')
 
         album = corpus.get_content('PhotoAlbum')
+        album.album_no = album_no
+
+        # album title
         title_tag = tei.find('titlePart', attrs={'type': 'main'})
         if title_tag:
             album.title = title_tag.text.strip()
         else:
             job.report(f"Unable to determine title for album {album_file.replace(tei_path, '')}!")
 
-        album.album_no = album_no
-        album.description = tei.find('div', attrs={'type': 'description'}).p.text.strip()
+        # album desc
+        album_desc_div = tei.find('div', attrs={'type': 'description'})
+        if album_desc_div and hasattr(album_desc_div, 'p'):
+            album.description = album_desc_div.p.text.strip()
+        else:
+            job.report(f"Unable to determine description for album {album_file.replace(tei_path, '')}!")
 
+        # get photos
         photo_tags = tei.find_all('div', attrs={'type': 'photo'})
         current_photo = 0
         for photo_tag in photo_tags:
