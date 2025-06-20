@@ -3,7 +3,7 @@ import json
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 from natsort import natsorted
-from corpus import *
+from corpus import Job
 
 
 REGISTRY = {
