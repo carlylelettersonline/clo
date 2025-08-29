@@ -3,6 +3,7 @@ import os
 import json
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
+from django.utils.text import slugify
 from natsort import natsorted
 from corpus import Job
 
