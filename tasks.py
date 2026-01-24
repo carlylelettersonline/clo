@@ -1,9 +1,11 @@
 import re
+import os
 import json
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
+from django.utils.text import slugify
 from natsort import natsorted
-from corpus import *
+from corpus import Job
 
 
 REGISTRY = {
@@ -30,11 +32,26 @@ REGISTRY = {
 
 
 ref_target_matcher = re.compile(r'volume-([^\/]*)\/(.*)')
+iiif_prefix = ''
+iiif_separator = ''
 
 
 def ingest_data(job_id):
     job = Job(job_id)
     corpus = job.corpus
+
+    if 'IIIF Prefix' not in corpus.kvp or 'IIIF Separator' not in corpus.kvp:
+        corpus.kvp['IIIF Prefix'] = 'https://testletters.wcu.edu/iiif-public/iiif/2'
+        corpus.kvp['IIIF Separator'] = '$!$'
+        corpus.save()
+
+    job.report(f"IIIF Prefix: {corpus.kvp['IIIF Prefix']}\nPath Separator: {corpus.kvp['IIIF Separator']}\n")
+
+    global iiif_prefix
+    global iiif_separator
+    iiif_prefix = corpus.kvp['IIIF Prefix']
+    iiif_separator = corpus.kvp['IIIF Separator']
+
     tei_repo_name = job.get_param_value('tei_repo')
     tei_repo = corpus.repos[tei_repo_name]
 
@@ -54,18 +71,18 @@ def ingest_data(job_id):
     volumes_needing_id_fix = []
     front_matter_errors = []
     letter_errors = []
-    
+
     for volume_file in volume_files:
         job.report(f"Parsing {volume_file}.")
         volume_file = f'{tei_path}/{volume_file}'
         with open(volume_file, 'r') as tei_in:
             tei_text = tei_in.read()
-    
+
         tei = BeautifulSoup(tei_text, 'xml')
-    
+
         # determine volume number
         vol_no = None
-    
+
         text_tag = tei.find('text')
         if 'id' in text_tag.attrs:
             vol_no = text_tag['id']
@@ -74,32 +91,32 @@ def ingest_data(job_id):
         else:
             volumes_needing_id_fix.append(volume_file)
             vol_no = volume_file.replace(tei_path + '/', '').replace('-P5.xml', '')
-    
+
         if vol_no:
             vol_no = int(vol_no.lower().replace('volume-', ''))
             volume = corpus.get_content('LetterVolume')
             volume.volume_no = vol_no
-    
+
             # determine description
             volume.description = tei.find_all('publicationStmt')[1].find_all('p')[1].text.strip()
-    
+
             # gather front matter
             fm_divs = tei.find_all('div1', attrs={'type': 'section'})
             for fm_div in fm_divs:
                 fm = corpus.get_content('FrontMatter')
                 fm_info = {'slug': front_matter_slug(fm_div['id'])}
                 fm.html = parse_front_matter(fm_div, fm_info)
-    
+
                 if 'errors' in fm_info and fm_info['errors']:
                     front_matter_errors += fm_info['errors']
-    
+
                 if fm_info['title']:
                     fm.title = fm_info['title']
                 fm.slug = fm_info['slug']
                 fm.footnotes = fm_info.get('footnotes', [])
                 fm.save()
                 volume.front_matters.append(fm.id)
-    
+
             # parse letters
             volume_letters = {}
             letter_divs = tei.find_all('div3', attrs={'type': 'letter'})
@@ -107,10 +124,10 @@ def ingest_data(job_id):
                 letter = corpus.get_content('Letter')
                 letter_info = {}
                 letter.html = parse_letter(letter_div, letter_info)
-    
+
                 if 'errors' in letter_info and letter_info['errors']:
                     letter_errors += letter_info['errors']
-    
+
                 # catch malformed dates
                 try:
                     letter.date = date_parser.parse(letter_info.get('date'))
@@ -140,27 +157,30 @@ def ingest_data(job_id):
                 if letter.date:
                     letter_key = f'{letter.date.year}-{letter.date.month}-{letter.date.day}-{letter.id}'
                     volume_letters[letter_key] = letter.id
-    
+                elif vol_no == 0:
+                    letter_key = letter.doi
+                    volume_letters[letter_key] = letter.id
+
             sorted_letter_keys = natsorted(list(volume_letters.keys()))
             for sorted_letter_key in sorted_letter_keys:
                 volume.letters.append(volume_letters[sorted_letter_key])
 
             volume.save()
             volume_id_map[vol_no] = volume.id
-    
+
     job.report("Creating volume batches...")
     create_volume_batches(corpus, volume_id_map)
 
     job.report("Importing photos...")
-    import_photos(corpus, tei_path, volume_id_map)
+    import_photos(job, corpus, tei_path, volume_id_map)
 
     job.report("Importing manuscript images...")
     import_manuscripts(corpus, tei_path)
-    
+
     if front_matter_errors:
         front_matter_errors = sorted(list(set(front_matter_errors)))
         job.report("\nFront Matter Parsing Errors: \n{0}".format('\n\t'.join(front_matter_errors)))
-    
+
     if letter_errors:
         letter_errors = sorted(list(set(letter_errors)))
         job.report("\nLetter Parsing Errors: \n{0}".format('\n\t'.join(letter_errors)))
@@ -233,9 +253,11 @@ def parse_letter(tag, info={}, parser=None):
             info['doi'] = tag['xml:id']
 
             docDate = tag.find('docDate')
-            info['date'] = docDate['value']
-            if info['date'].endswith('00'):
-                info['date'] = info['date'].replace('-00', '-01')
+            if 'value' in docDate.attrs:
+                info['date'] = docDate['value']
+                if info['date'].endswith('00'):
+                    info['date'] = info['date'].replace('-00', '-01')
+
             info['date_label'] = docDate.text
 
             persons = tag.find_all('person')
@@ -347,7 +369,7 @@ def tei_to_html(tag, info, parser):
                 html += '</div>'
 
             elif tag.name == 'graphic' and 'url' in tag.attrs:
-                html += f'<img class="clo-figure" src="https://iiif.dh.tamu.edu/iiif/2/CLO%2Ffigures%2F{tag["url"]}/full/full/0/default.jpg" />'
+                html += f'<img class="clo-figure" src="{iiif_prefix}/CLO{iiif_separator}figures{iiif_separator}{tag["url"]}/full/full/0/default.jpg" />'
 
             elif tag.name == 'person' and 'reg' in tag.attrs:
                 html += f'<span class="clo-person" title="{tag["reg"]}">'
@@ -476,7 +498,7 @@ def create_volume_batches(corpus, volume_id_map):
         vb.save()
 
 
-def import_photos(corpus, tei_path, volume_id_map):
+def import_photos(job, corpus, tei_path, volume_id_map):
     album_files = [f for f in os.listdir(tei_path) if f.lower().startswith('album') and f.lower().endswith('xml')]
 
     for album_file in album_files:
@@ -484,6 +506,7 @@ def import_photos(corpus, tei_path, volume_id_map):
         if album_no.isdigit():
             album_no = int(album_no)
         else:
+            job.report(f"{album_file} is not named according to photo album TEI file naming convention. Skipping...")
             continue
 
         album_file = f'{tei_path}/{album_file}'
@@ -493,10 +516,23 @@ def import_photos(corpus, tei_path, volume_id_map):
         tei = BeautifulSoup(tei_text, 'xml')
 
         album = corpus.get_content('PhotoAlbum')
-        album.title = tei.find('titlePart', attrs={'type': 'main'}).text.strip()
         album.album_no = album_no
-        album.description = tei.find('div', attrs={'type': 'description'}).p.text.strip()
 
+        # album title
+        title_tag = tei.find('titlePart', attrs={'type': 'main'})
+        if title_tag:
+            album.title = title_tag.text.strip()
+        else:
+            job.report(f"Unable to determine title for album {album_file.replace(tei_path, '')}!")
+
+        # album desc
+        album_desc_div = tei.find('div', attrs={'type': 'description'})
+        if album_desc_div and hasattr(album_desc_div, 'p'):
+            album.description = album_desc_div.p.text.strip()
+        else:
+            job.report(f"Unable to determine description for album {album_file.replace(tei_path, '')}!")
+
+        # get photos
         photo_tags = tei.find_all('div', attrs={'type': 'photo'})
         current_photo = 0
         for photo_tag in photo_tags:
@@ -524,7 +560,7 @@ def import_photos(corpus, tei_path, volume_id_map):
             photo.publisher = photo_tag.find('div', attrs={'type': 'publisher'}).p.text.strip()
 
             if album_file.endswith('_0.xml'):
-                relevant_volume_id = volume_id_map[current_photo + 1]
+                relevant_volume_id = volume_id_map[current_photo]
                 photo.frontispiece_volume = relevant_volume_id
 
             photo.save()
@@ -535,7 +571,7 @@ def import_photos(corpus, tei_path, volume_id_map):
 
 
 def import_manuscripts(corpus, tei_path):
-    iiif_base = "https://iiif.dh.tamu.edu/iiif/2/CLO%2Fmanuscripts%2F"
+    iiif_base = f"{iiif_prefix}/CLO{iiif_separator}manuscripts{iiif_separator}"
     manuscript_json_path = tei_path + '/manuscripts.json'
     with open(manuscript_json_path, 'r', encoding='utf-8') as manuscripts_in:
         letter_images = json.load(manuscripts_in)
@@ -547,7 +583,7 @@ def import_manuscripts(corpus, tei_path):
             letter.page_images = []
 
             for letter_image in letter_images[letter_doi]:
-                letter_image = letter_image.replace('/', '%2F')
+                letter_image = letter_image.replace('/', iiif_separator)
                 letter.page_images.append(f'{iiif_base}{letter_image}')
 
             letter.save()
@@ -590,137 +626,137 @@ def front_matter_slug(xml_id):
 
 
 # for posterity!
-def create_album_tei(corpus):
-    album_meta = [
-        {
-            'title': "Frontispieces of the <i>Duke-Edinburgh Edition</i>",
-            'desc': "This is a special album collecting all of the images from the entire run to date of the Duke-Edinburgh Edition of the Carlyle Letters, including all frontispieces and all internal images."
-        },
-        {
-            'title': "Album One",
-            'desc': "“Tales of the Sun” / photographs by Robert Scott Tait (RST) assembled and bound into a presentation album by Geraldine Jewsbury (GEJ) / this volume with its laid in addenda includes 39 images / the title page is dated 1855, but numerous images are from two years later",
-        },
-        {
-            'title': "Album Two",
-            'desc': "Captioned by TC / “ These things I mark, mournfully, as a kind of duty,—this evg Monday 7 Octr 1867—T.C. ” / this album with its laid-in addenda includes 52 images",
-        },
-        {
-            'title': "Album Three",
-            'desc': "Captioned by TC / “This seems to have been gathered mainly at Haddington (in perhaps 1859 &c): I know few of the figures; mournfully mark this I do (Monday night, 7 Octr 1869) T.C.” / “x” in TC’s hand indicates that he was unable to identify the figure) / this album includes 44 images",
-        },
-        {
-            'title': "Album Four",
-            'desc': "Almost certainly collected and arranged by JWC / many images annotated by TC / this album includes 105 images",
-        },
-        {
-            'title': "Album Five",
-            'desc': "An assorted array, many pictures from TC and JWC’s era including material possibly removed from their portrait screens, other portraits and views collected, assembled, and arranged by Alexander Carlyle / this album contains 38 images",
-        },
-        {
-            'title': "Album Six",
-            'desc': "“Personal to Alexander Carlyle, T.C.’s nephew. Probably done after T.C.’s death.” / the album generally consists of two slots per page; some slots are blank and thus marked, in square brackets / this album contains 84 images",
-        },
-        {
-            'title': "Album Seven",
-            'desc': "“Personal to Alexander Carlyle, T.C.’s nephew. Probably done after T.C’s death.” / this album contains 140 images",
-        },
-    ]
-
-    with open(corpus.path + '/files/photos.json', 'r', encoding='utf-8') as albums_in:
-        albums = json.load(albums_in)
-
-    for album in albums:
-        album_no_parts = [p for p in album['imagesFolder'].split('/') if p]
-        album_str = album_no_parts[-1].replace('album_', '')
-        album_no = int(album_str)
-        meta = album_meta[album_no]
-
-        with open(f'{corpus.path}/files/album_{album_no}.xml', 'w', encoding='utf-8') as album_out:
-            album_out.write(f'''<?xml version="1.0" encoding="UTF-8"?>
-    <?xml-model href="http://www.tei-c.org/release/xml/tei/custom/schema/relaxng/tei_all.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
-    <?xml-model href="http://www.tei-c.org/release/xml/tei/custom/schema/relaxng/tei_all.rng" type="application/xml"
-        schematypens="http://purl.oclc.org/dsdl/schematron"?>
-    <TEI xmlns="http://www.tei-c.org/ns/1.0">
-      <teiHeader>
-          <fileDesc>
-             <titleStmt>
-                <title>Thomas Carlyle Photograph Albums, {meta['title']}</title>
-             </titleStmt>
-             <publicationStmt>
-                <p>Alternative title is Tales of the Sun, 1855</p>
-                <p>Electronic reproduction. New York, N.Y.: Columbia University Libraries, 2018. </p>
-             </publicationStmt>
-             <sourceDesc>
-                <p>Original album forms part of the Thomas Carlyle Papers Collection at Columbia University Rare Book and Manuscript Library</p>
-             </sourceDesc>
-          </fileDesc>
-      </teiHeader>
-      <text id="{album_no}">
-         <front>
-            <titlePart type="main">{meta['title']}</titlePart>
-            <div type="description">
-               <p>{meta['desc']}</p>
-            </div>
-         </front>
-          <body>
-             <head>Thomas Carlyle Photograph Albums, Volume {album_no}</head>''')
-
-            for photo_no in range(0, len(album['images'])):
-                photo = album['images'][photo_no]
-                creators = []
-                for creator in photo['metadata']['creators']:
-                    creators.append(f'''
-                      <person>
-                         <persName>{creator}</persName>
-                      </person>''')
-
-                subjects = []
-                for subject in photo['metadata']['subjects']:
-                    subjects.append(f'''
-                    <p>{subject}</p>''')
-
-                album_out.write(f'''
-             <div type="photo" id="{photo_no}">
-                <figure>
-                   <head>{photo['metadata']['title']}</head>
-                   <graphic url="https://iiif.dh.tamu.edu/iiif/2/CLO%2Falbum_{album_str}%2F{photo['imageUrl'].replace('.gif', '.jpg')}"/>
-                   <caption>{photo['metadata']['description']}</caption>
-                   <note>
-                      <date when="{photo['metadata']['date']}">{photo['metadata']['date']}</date>
-                   </note>
-                   <listPerson type="creator">{''.join(creators)}
-                   </listPerson>
-                   <div type="subjects">{''.join(subjects)}
-                   </div>
-                   <div type="mediaType">
-                      <p>{photo['metadata']['media_type']}</p>
-                   </div>
-                   <div type="note">
-                      <p>{photo['metadata']['note']}</p>
-                   </div>
-                   <div type="source">
-                      <p>{photo['metadata']['source']}</p>
-                   </div>
-                   <div type="digSpec"> 
-                      <p>{photo['metadata']['digital_specs']}</p>
-                   </div>
-                   <div type="rights">
-                      <p>{photo['metadata']['rights']}</p>
-                   </div>
-                   <div type="langNote">
-                      <p>{photo['metadata']['language_note']}</p>
-                   </div>
-                   <div type="format">
-                      <p>{photo['metadata']['format']}</p>
-                   </div>
-                   <div type="publisher">
-                      <p>{photo['metadata']['publisher']}</p>
-                   </div>
-                </figure>
-             </div>''')
-
-            album_out.write('''
-            </body>
-         </text>
-       </TEI>
-            ''')
+# def create_album_tei(corpus):
+#     album_meta = [
+#         {
+#             'title': "Frontispieces of the <i>Duke-Edinburgh Edition</i>",
+#             'desc': "This is a special album collecting all of the images from the entire run to date of the Duke-Edinburgh Edition of the Carlyle Letters, including all frontispieces and all internal images."
+#         },
+#         {
+#             'title': "Album One",
+#             'desc': "“Tales of the Sun” / photographs by Robert Scott Tait (RST) assembled and bound into a presentation album by Geraldine Jewsbury (GEJ) / this volume with its laid in addenda includes 39 images / the title page is dated 1855, but numerous images are from two years later",
+#         },
+#         {
+#             'title': "Album Two",
+#             'desc': "Captioned by TC / “ These things I mark, mournfully, as a kind of duty,—this evg Monday 7 Octr 1867—T.C. ” / this album with its laid-in addenda includes 52 images",
+#         },
+#         {
+#             'title': "Album Three",
+#             'desc': "Captioned by TC / “This seems to have been gathered mainly at Haddington (in perhaps 1859 &c): I know few of the figures; mournfully mark this I do (Monday night, 7 Octr 1869) T.C.” / “x” in TC’s hand indicates that he was unable to identify the figure) / this album includes 44 images",
+#         },
+#         {
+#             'title': "Album Four",
+#             'desc': "Almost certainly collected and arranged by JWC / many images annotated by TC / this album includes 105 images",
+#         },
+#         {
+#             'title': "Album Five",
+#             'desc': "An assorted array, many pictures from TC and JWC’s era including material possibly removed from their portrait screens, other portraits and views collected, assembled, and arranged by Alexander Carlyle / this album contains 38 images",
+#         },
+#         {
+#             'title': "Album Six",
+#             'desc': "“Personal to Alexander Carlyle, T.C.’s nephew. Probably done after T.C.’s death.” / the album generally consists of two slots per page; some slots are blank and thus marked, in square brackets / this album contains 84 images",
+#         },
+#         {
+#             'title': "Album Seven",
+#             'desc': "“Personal to Alexander Carlyle, T.C.’s nephew. Probably done after T.C’s death.” / this album contains 140 images",
+#         },
+#     ]
+#
+#     with open(corpus.path + '/files/photos.json', 'r', encoding='utf-8') as albums_in:
+#         albums = json.load(albums_in)
+#
+#     for album in albums:
+#         album_no_parts = [p for p in album['imagesFolder'].split('/') if p]
+#         album_str = album_no_parts[-1].replace('album_', '')
+#         album_no = int(album_str)
+#         meta = album_meta[album_no]
+#
+#         with open(f'{corpus.path}/files/album_{album_no}.xml', 'w', encoding='utf-8') as album_out:
+#             album_out.write(f'''<?xml version="1.0" encoding="UTF-8"?>
+#     <?xml-model href="http://www.tei-c.org/release/xml/tei/custom/schema/relaxng/tei_all.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+#     <?xml-model href="http://www.tei-c.org/release/xml/tei/custom/schema/relaxng/tei_all.rng" type="application/xml"
+#         schematypens="http://purl.oclc.org/dsdl/schematron"?>
+#     <TEI xmlns="http://www.tei-c.org/ns/1.0">
+#       <teiHeader>
+#           <fileDesc>
+#              <titleStmt>
+#                 <title>Thomas Carlyle Photograph Albums, {meta['title']}</title>
+#              </titleStmt>
+#              <publicationStmt>
+#                 <p>Alternative title is Tales of the Sun, 1855</p>
+#                 <p>Electronic reproduction. New York, N.Y.: Columbia University Libraries, 2018. </p>
+#              </publicationStmt>
+#              <sourceDesc>
+#                 <p>Original album forms part of the Thomas Carlyle Papers Collection at Columbia University Rare Book and Manuscript Library</p>
+#              </sourceDesc>
+#           </fileDesc>
+#       </teiHeader>
+#       <text id="{album_no}">
+#          <front>
+#             <titlePart type="main">{meta['title']}</titlePart>
+#             <div type="description">
+#                <p>{meta['desc']}</p>
+#             </div>
+#          </front>
+#           <body>
+#              <head>Thomas Carlyle Photograph Albums, Volume {album_no}</head>''')
+#
+#             for photo_no in range(0, len(album['images'])):
+#                 photo = album['images'][photo_no]
+#                 creators = []
+#                 for creator in photo['metadata']['creators']:
+#                     creators.append(f'''
+#                       <person>
+#                          <persName>{creator}</persName>
+#                       </person>''')
+#
+#                 subjects = []
+#                 for subject in photo['metadata']['subjects']:
+#                     subjects.append(f'''
+#                     <p>{subject}</p>''')
+#
+#                 album_out.write(f'''
+#              <div type="photo" id="{photo_no}">
+#                 <figure>
+#                    <head>{photo['metadata']['title']}</head>
+#                    <graphic url="{iiif_prefix}/CLO{iiif_separator}album_{album_str}{iiif_separator}{photo['imageUrl'].replace('.gif', '.jpg')}"/>
+#                    <caption>{photo['metadata']['description']}</caption>
+#                    <note>
+#                       <date when="{photo['metadata']['date']}">{photo['metadata']['date']}</date>
+#                    </note>
+#                    <listPerson type="creator">{''.join(creators)}
+#                    </listPerson>
+#                    <div type="subjects">{''.join(subjects)}
+#                    </div>
+#                    <div type="mediaType">
+#                       <p>{photo['metadata']['media_type']}</p>
+#                    </div>
+#                    <div type="note">
+#                       <p>{photo['metadata']['note']}</p>
+#                    </div>
+#                    <div type="source">
+#                       <p>{photo['metadata']['source']}</p>
+#                    </div>
+#                    <div type="digSpec">
+#                       <p>{photo['metadata']['digital_specs']}</p>
+#                    </div>
+#                    <div type="rights">
+#                       <p>{photo['metadata']['rights']}</p>
+#                    </div>
+#                    <div type="langNote">
+#                       <p>{photo['metadata']['language_note']}</p>
+#                    </div>
+#                    <div type="format">
+#                       <p>{photo['metadata']['format']}</p>
+#                    </div>
+#                    <div type="publisher">
+#                       <p>{photo['metadata']['publisher']}</p>
+#                    </div>
+#                 </figure>
+#              </div>''')
+#
+#             album_out.write('''
+#             </body>
+#          </text>
+#        </TEI>
+#             ''')
