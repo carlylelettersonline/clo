@@ -169,7 +169,7 @@ def ingest_data(job_id):
             volume_id_map[vol_no] = volume.id
 
     job.report("Creating volume batches...")
-    create_volume_batches(corpus, volume_id_map)
+    create_volume_batches(corpus, tei_path, volume_id_map)
 
     job.report("Importing photos...")
     import_photos(job, corpus, tei_path, volume_id_map)
@@ -452,50 +452,29 @@ def log_tag(tag):
     return log
 
 
-def create_volume_batches(corpus, volume_id_map):
-    batches = [
-        {
-            'title': "The Carlyles in Scotland and in London",
-            'date_range': "1812 to 1840",
-            'volumes': [1, 12],
-            'selected_contents': '''Ecclefechan / School Days / Edward Irving / Teacher and Tutor / Edinburgh / Courtship and Marriage / Craigenputtoch / Ralph Waldo Emerson / London / Leigh Hunt / John Stuart Mill / John Sterling / Robert Browning / Alfred Tennyson / Erasmus Darwin / Harriet Martineau / John Forster / Lectures on Literature, Revolution, and Heroes / Publication of Elements of Geometry (1822), <i>Wilhelm Meister</i> (1824), <i>Life of Schiller</i> (1825), <i>German Romance</i> (1827), “Burns” (1828), “Signs of the Times” (1829), “On History” (1830), “Characteristics” (1831), <i>Sartor Resartus</i> (1833–34), <i>French Revolution</i> (1837), <i>Essays</i> (1838), and <i>Chartism</i> (1839)''',
-            'order': 1
-        },
-        {
-            'title': "Success and Security",
-            'date_range': "1841 to 1850",
-            'volumes': [13, 25],
-            'selected_contents': '''Samuel Laurence’s Portraits / Geraldine Jewsbury / Death of JWC’s Mother / Death of Sterling / William Makepeace Thackeray / Corn Laws / Charles Gavan Duffy / Journeys to Ireland and to Germany / International Copyright Law / John Ruskin / Lord and Lady Ashburton / Edward FitzGerald / Squire forgeries / R. M. Milnes / Giuseppe Mazzini / Emerson’s second visit / Joseph Neuberg / Louis Blanc / JWC’s screen / Margaret Fuller / John Tyndall / Publication of <i>Heroes and Hero-Worship</i> (1841), <i>Past and Present</i> (1843), <i>Oliver Cromwell’s Letters and Speeches</i> (1845), “The Negro Question” (1849), and <i>Latter-Day Pamphlets</i> (1850)''',
-            'order': 2
-        },
-        {
-            'title': "The “Valley of the Shadow of Frederick”",
-            'date_range': "1851 to November 1862",
-            'volumes': [26, 38],
-            'selected_contents': '''Woolner’s Medallion / Crystal Palace / The Grange / Death of Wellington / Journeys to Paris and Germany / Sickness and Health / Garrett Study / John Ricardo / Holidays in Scotland / Death of TC’s Mother / American Investments / Crimean War / JWC’s “BUDGET of a Femme Incomprise” / “The Guises” / Alexander and Anne Gilchrist / Death of Lady Ashburton / Indian Mutiny / Tait’s A Chelsea Interior / Louisa Lady Ashburton / George Eliot / Ford Madox Ford’s <i>Work</i> / Death of Nero / Charlotte Cushman / American Civil War / Publication of <i>Life of Sterling</i> (1851), <i>Collected Works</i> (1857–58), and <i>Frederick</i>, Volumes 1–3 (1858, 1862)''',
-            'order': 3
-        },
-        {
-            'title': "“We shall go to them”",
-            'date_range': "December 1862 to February 1881",
-            'volumes': [39, 50],
-            'selected_contents': '''Readings by Dickens / Moncure Conway / JWC’s Failing Health / Death of Thackeray / “Valley of the shadow of blue pill” / Lord Houghton / Margaret Oliphant / Death of Lord Ashburton / “Ilias (Americana) in Nuce” (1863) and Frederick, Volumes 4–6 (1864, 1865) / Death of JWC, 1866 / Eyre Defence Committee / Visit to Menton / Quarrels with Ruskin / Photos by Cameron / Shooting Niagara (1867) / the Watts portrait / the Library Edition / Mary Carlyle Aitken / Holidays with Lady Ashburton / Woolner’s plaster of TC’s hands / Cromwell’s death mask / Death of Dickens / the Franco-Prussian War / Farewell to Mazzini / John Ruskin / Emerson’s Last Visit''',
-            'order': 4
-        },
-    ]
+def create_volume_batches(corpus, tei_path, volume_id_map):
+    batches = None
+    batch_json_file = f'{tei_path}/volume_batches.json'
 
-    for batch in batches:
-        vb = corpus.get_content('VolumeBatch')
-        vb.title = batch['title']
-        vb.date_range = batch['date_range']
-        vb.selected_contents = batch['selected_contents']
-        vb.order = batch['order']
+    if os.path.exists(batch_json_file):
+        with open(batch_json_file, 'r', encoding='utf-8') as batch_in:
+            batches = json.load(batch_in)
 
-        for vol_no in range(batch['volumes'][0], batch['volumes'][1] + 1):
-            if vol_no in volume_id_map:
-                vb.volumes.append(volume_id_map[vol_no])
-
-        vb.save()
+    if batches:
+        for batch in batches:
+            vb = corpus.get_content('VolumeBatch')
+            vb.title = batch['title']
+            vb.date_range = batch['date_range']
+            vb.selected_contents = batch['selected_contents']
+            vb.order = batch['order']
+    
+            for vol_no in range(batch['volumes'][0], batch['volumes'][1] + 1):
+                if vol_no in volume_id_map:
+                    vb.volumes.append(volume_id_map[vol_no])
+    
+            vb.save()
+    else:
+        print("Unable to locate/read volume batch file!")
 
 
 def import_photos(job, corpus, tei_path, volume_id_map):
